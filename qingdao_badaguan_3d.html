@@ -1,0 +1,2459 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>青島八大關 — 紅瓦綠樹・碧海藍天 3D 互動虛擬景觀</title>
+  <style>
+    :root {
+      --bg-glass: rgba(15, 23, 34, 0.76);
+      --bg-glass-strong: rgba(12, 19, 29, 0.88);
+      --border-glass: rgba(255, 255, 255, 0.16);
+      --accent-terracotta: #d96b43;
+      --accent-gold: #f0b85c;
+      --accent-mint: #48b89f;
+      --accent-sea: #4ea8de;
+      --text-main: #f4f6f8;
+      --text-muted: #b0bec5;
+      --font-sans: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-serif: "Noto Serif TC", "Songti TC", "PMingLiU", Georgia, serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #0b1522;
+      font-family: var(--font-sans);
+      color: var(--text-main);
+    }
+
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+    }
+
+    #canvas-container:active {
+      cursor: grabbing;
+    }
+
+    /* Subtle atmospheric vignette */
+    .vignette-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(circle at center, transparent 58%, rgba(6, 12, 20, 0.48) 100%);
+      z-index: 2;
+    }
+
+    /* Crosshair for PointerLock mode */
+    #crosshair {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 18px;
+      height: 18px;
+      pointer-events: none;
+      z-index: 5;
+      opacity: 0;
+      transition: opacity 0.25s ease;
+    }
+    #crosshair.active {
+      opacity: 0.85;
+    }
+    #crosshair::before, #crosshair::after {
+      content: "";
+      position: absolute;
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 0 4px rgba(0,0,0,0.6);
+    }
+    #crosshair::before {
+      top: 8px; left: 2px; width: 14px; height: 2px;
+    }
+    #crosshair::after {
+      left: 8px; top: 2px; width: 2px; height: 14px;
+    }
+
+    /* Top Header Bar */
+    .top-bar {
+      position: fixed;
+      top: 18px;
+      left: 20px;
+      right: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      pointer-events: none;
+      z-index: 10;
+      gap: 16px;
+    }
+
+    .brand-card {
+      pointer-events: auto;
+      background: var(--bg-glass);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--border-glass);
+      border-left: 4px solid var(--accent-terracotta);
+      border-radius: 14px;
+      padding: 14px 20px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+      max-width: 450px;
+    }
+
+    .brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--accent-gold);
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+
+    .brand-title {
+      font-family: var(--font-serif);
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: #ffffff;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .brand-subtitle {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      line-height: 1.45;
+    }
+
+    /* Environment & Atmosphere Control Panel */
+    .env-panel {
+      pointer-events: auto;
+      background: var(--bg-glass);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--border-glass);
+      border-radius: 14px;
+      padding: 12px 16px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 320px;
+    }
+
+    .env-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .env-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+    }
+
+    .pill-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      color: var(--text-main);
+      padding: 5px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .pill-btn:hover {
+      background: rgba(255, 255, 255, 0.18);
+      transform: translateY(-1px);
+    }
+
+    .pill-btn.active {
+      background: var(--accent-terracotta);
+      border-color: #f28c68;
+      color: #fff;
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(217, 107, 67, 0.4);
+    }
+
+    .pill-btn.season.active {
+      background: #c98a2c;
+      border-color: var(--accent-gold);
+      box-shadow: 0 4px 12px rgba(240, 184, 92, 0.35);
+    }
+
+    .time-slider-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+    }
+
+    .time-slider {
+      flex: 1;
+      accent-color: var(--accent-gold);
+      cursor: pointer;
+      height: 5px;
+    }
+
+    .time-readout {
+      font-variant-numeric: tabular-nums;
+      font-size: 12px;
+      color: var(--accent-gold);
+      font-weight: 700;
+      min-width: 44px;
+      text-align: right;
+    }
+
+    /* Left Navigation / Landmark Quick-Jump */
+    .side-nav {
+      position: fixed;
+      left: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 10;
+      pointer-events: auto;
+      max-width: 230px;
+    }
+
+    .nav-header {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--accent-gold);
+      padding-left: 6px;
+      margin-bottom: 2px;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+      font-weight: 600;
+    }
+
+    .spot-btn {
+      background: var(--bg-glass);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-glass);
+      border-radius: 11px;
+      padding: 9px 12px;
+      color: var(--text-main);
+      text-align: left;
+      cursor: pointer;
+      transition: all 0.22s ease;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+    }
+
+    .spot-btn:hover {
+      background: rgba(30, 44, 62, 0.9);
+      border-color: rgba(240, 184, 92, 0.5);
+      transform: translateX(4px);
+    }
+
+    .spot-btn.active {
+      border-left: 4px solid var(--accent-gold);
+      background: rgba(35, 50, 70, 0.92);
+    }
+
+    .spot-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    .spot-info {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .spot-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .spot-road {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Right Landmark Detail Drawer */
+    .detail-card {
+      position: fixed;
+      right: 20px;
+      bottom: 84px;
+      width: 340px;
+      background: var(--bg-glass-strong);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-glass);
+      border-top: 3px solid var(--accent-gold);
+      border-radius: 16px;
+      padding: 18px 20px;
+      z-index: 10;
+      pointer-events: auto;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .detail-card.hidden {
+      opacity: 0;
+      transform: translateY(20px);
+      pointer-events: none;
+    }
+
+    .detail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 8px;
+    }
+
+    .detail-tag {
+      display: inline-block;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: rgba(240, 184, 92, 0.18);
+      color: var(--accent-gold);
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .detail-title {
+      font-family: var(--font-serif);
+      font-size: 19px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 18px;
+      cursor: pointer;
+      line-height: 1;
+      padding: 2px 6px;
+    }
+    .close-btn:hover { color: #fff; }
+
+    .detail-desc {
+      font-size: 13px;
+      line-height: 1.6;
+      color: #dbe4ec;
+      margin-bottom: 12px;
+    }
+
+    .detail-meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-size: 11.5px;
+      margin-bottom: 12px;
+    }
+
+    .meta-item span {
+      display: block;
+      color: var(--text-muted);
+      font-size: 10.5px;
+    }
+    .meta-item strong {
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .detail-links {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .source-link {
+      font-size: 11.5px;
+      color: var(--accent-sea);
+      text-decoration: none;
+      background: rgba(78, 168, 222, 0.12);
+      border: 1px solid rgba(78, 168, 222, 0.3);
+      padding: 5px 10px;
+      border-radius: 7px;
+      transition: all 0.2s;
+    }
+    .source-link:hover {
+      background: rgba(78, 168, 222, 0.25);
+      color: #fff;
+    }
+
+    /* Bottom Controls HUD */
+    .bottom-hud {
+      position: fixed;
+      bottom: 18px;
+      left: 20px;
+      right: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      pointer-events: none;
+      z-index: 10;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .controls-bar {
+      pointer-events: auto;
+      background: var(--bg-glass);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--border-glass);
+      border-radius: 12px;
+      padding: 9px 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 12px;
+      color: var(--text-muted);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+      flex-wrap: wrap;
+    }
+
+    .key-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    kbd {
+      background: rgba(255, 255, 255, 0.14);
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      border-bottom-width: 2px;
+      border-radius: 5px;
+      padding: 2px 6px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .action-bar {
+      pointer-events: auto;
+      display: flex;
+      gap: 8px;
+    }
+
+    .action-btn {
+      background: var(--bg-glass);
+      backdrop-filter: blur(14px);
+      border: 1px solid var(--border-glass);
+      color: #fff;
+      padding: 9px 14px;
+      border-radius: 11px;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .action-btn:hover {
+      background: rgba(217, 107, 67, 0.85);
+      border-color: #f28c68;
+    }
+
+    .action-btn.active {
+      background: var(--accent-mint);
+      border-color: #72dec7;
+      color: #06231d;
+    }
+
+    /* 3D World Floating Labels */
+    #labels-container {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 6;
+      overflow: hidden;
+    }
+
+    .world-label {
+      position: absolute;
+      transform: translate(-50%, -100%);
+      pointer-events: auto;
+      cursor: pointer;
+      background: rgba(12, 20, 31, 0.82);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      border-radius: 20px;
+      padding: 5px 12px 5px 9px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+      transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
+    }
+
+    .world-label:hover {
+      background: rgba(217, 107, 67, 0.92);
+      border-color: #fff;
+      transform: translate(-50%, -106%) scale(1.06);
+    }
+
+    .world-label::after {
+      content: "";
+      position: absolute;
+      bottom: -6px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-width: 6px 5px 0 5px;
+      border-style: solid;
+      border-color: rgba(12, 20, 31, 0.82) transparent transparent transparent;
+    }
+
+    .label-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    /* Compass & Coordinates Pill */
+    .telemetry-pill {
+      font-variant-numeric: tabular-nums;
+      color: var(--accent-gold);
+      font-weight: 600;
+    }
+
+    @media (max-width: 900px) {
+      .side-nav { display: none; }
+      .detail-card { width: calc(100% - 40px); right: 20px; left: 20px; bottom: 75px; }
+      .brand-card { max-width: 280px; padding: 10px 14px; }
+      .brand-title { font-size: 18px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="canvas-container"></div>
+  <div class="vignette-overlay"></div>
+  <div id="crosshair"></div>
+  <div id="labels-container"></div>
+
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="brand-card">
+      <div class="brand-badge">QINGDAO BADAGUAN · 國家重點文物保護單位</div>
+      <div class="brand-title">
+        青島八大關
+        <span style="font-size:13px;font-weight:400;color:var(--accent-gold);font-family:var(--font-sans);">紅瓦綠樹・碧海藍天</span>
+      </div>
+      <div class="brand-subtitle">
+        漫步太平灣畔「萬國建築博覽會」與「一關一樹」歷史街區。支援鍵盤 WASD 自由移動、滑鼠環視、四時光影與季節落葉切換。
+      </div>
+    </div>
+
+    <div class="env-panel">
+      <div class="env-row">
+        <span class="env-label">光影時段</span>
+        <div class="btn-group">
+          <button class="pill-btn" data-time="6.5">🌅 晨霧朝陽</button>
+          <button class="pill-btn" data-time="13.5">☀️ 朗日碧海</button>
+          <button class="pill-btn active" data-time="17.2">🌇 花石夕照</button>
+          <button class="pill-btn" data-time="20.5">🌙 靜謐星夜</button>
+        </div>
+      </div>
+
+      <div class="env-row">
+        <span class="env-label">太陽軌跡</span>
+        <div class="time-slider-wrap">
+          <input type="range" id="time-slider" class="time-slider" min="5" max="22" step="0.05" value="17.2" />
+          <span id="time-readout" class="time-readout">17:12</span>
+        </div>
+      </div>
+
+      <div class="env-row">
+        <span class="env-label">關區季節</span>
+        <div class="btn-group">
+          <button class="pill-btn season active" data-season="autumn">🍂 深秋金韻 (梧桐/銀杏/紅楓)</button>
+          <button class="pill-btn season" data-season="spring">🌸 仲春韶華 (韶關碧桃)</button>
+          <button class="pill-btn season" data-season="summer">🌿 盛夏濃蔭 (綠樹碧海)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Left Landmark Quick Jump -->
+  <div class="side-nav">
+    <div class="nav-header">八大關名勝導覽 (點擊漫遊)</div>
+    <button class="spot-btn active" data-spot="huashi">
+      <span class="spot-dot" style="color:#e07a5f;background:#e07a5f;"></span>
+      <div class="spot-info">
+        <span class="spot-name">花石樓 Huashi Villa</span>
+        <span class="spot-road">黃海路18號 · 海岬哥德古堡</span>
+      </div>
+    </button>
+    <button class="spot-btn" data-spot="princess">
+      <span class="spot-dot" style="color:#48b89f;background:#48b89f;"></span>
+      <div class="spot-info">
+        <span class="spot-name">公主樓 Princess Villa</span>
+        <span class="spot-road">居庸關路10號 · 丹麥童話別墅</span>
+      </div>
+    </button>
+    <button class="spot-btn" data-spot="butterfly">
+      <span class="spot-dot" style="color:#f28482;background:#f28482;"></span>
+      <div class="spot-info">
+        <span class="spot-name">蝴蝶樓 Butterfly Villa</span>
+        <span class="spot-road">山海關路21號 · 劫後桃花影樓</span>
+      </div>
+    </button>
+    <button class="spot-btn" data-spot="beach">
+      <span class="spot-dot" style="color:#4ea8de;background:#4ea8de;"></span>
+      <div class="spot-info">
+        <span class="spot-name">第二海水浴場與防波堤</span>
+        <span class="spot-road">山海關路6號 · 太平灣海濱</span>
+      </div>
+    </button>
+    <button class="spot-btn" data-spot="avenues">
+      <span class="spot-dot" style="color:#f0b85c;background:#f0b85c;"></span>
+      <div class="spot-info">
+        <span class="spot-name">一關一樹・落葉大道</span>
+        <span class="spot-road">居庸關銀杏 · 韶關碧桃 · 紫荊雪松</span>
+      </div>
+    </button>
+    <button class="spot-btn" data-spot="overview">
+      <span class="spot-dot" style="color:#a8dadc;background:#a8dadc;"></span>
+      <div class="spot-info">
+        <span class="spot-name">太平角全景鳥瞰</span>
+        <span class="spot-road">紅瓦綠樹・碧海藍天全貌</span>
+      </div>
+    </button>
+  </div>
+
+  <!-- Right Landmark Detail Drawer -->
+  <div id="detail-card" class="detail-card">
+    <div class="detail-header">
+      <div>
+        <span id="detail-tag" class="detail-tag">黃海路18號 · 歐洲古典城堡建築</span>
+        <h2 id="detail-title" class="detail-title">花石樓（Huashi Villa）</h2>
+      </div>
+      <button id="close-detail" class="close-btn" title="關閉介紹">✕</button>
+    </div>
+    <p id="detail-desc" class="detail-desc">
+      坐落於八大關南端岬角，背靠八大關、面臨第二海水浴場。建於1930至1931年，外牆由花崗岩石與鵝卵石砌築，融合哥德式八角尖塔、雉堞式女兒牆、拜占庭式門廊與巴洛克主體，頂層設有觀海台，是八大關最具代表性的點睛之筆。
+    </p>
+    <div class="detail-meta">
+      <div class="meta-item">
+        <span>建築年代與風格</span>
+        <strong id="detail-style">1931年竣工 · 哥德與俄式古堡</strong>
+      </div>
+      <div class="meta-item">
+        <span>代表行道樹與景觀</span>
+        <strong id="detail-tree">紫荊關路雪松 · 太平灣夕照</strong>
+      </div>
+    </div>
+    <div id="detail-links" class="detail-links">
+      <a class="source-link" href="https://m.guanhai.com.cn/p/11277.html" target="_blank" rel="noopener">📖 觀海新聞：花石樓百年の故事</a>
+      <a class="source-link" href="https://zh.wikipedia.org/zh-tw/%E5%85%AB%E5%A4%A7%E5%85%B3" target="_blank" rel="noopener">🏛️ 維基百科：八大關</a>
+    </div>
+  </div>
+
+  <!-- Bottom HUD -->
+  <div class="bottom-hud">
+    <div class="controls-bar">
+      <span class="key-hint"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>方向鍵</kbd> 自由移動</span>
+      <span class="key-hint"><kbd>滑鼠左鍵拖曳</kbd> 旋轉視角</span>
+      <span class="key-hint"><kbd>滾輪</kbd> 縮放</span>
+      <span class="key-hint"><kbd>Space</kbd>/<kbd>E</kbd> 上升 · <kbd>Q</kbd> 下降</span>
+      <span class="key-hint"><kbd>Shift</kbd> 加速</span>
+      <span id="telemetry" class="telemetry-pill">漫步高度 2.4m</span>
+    </div>
+
+    <div class="action-bar">
+      <button id="btn-walk-mode" class="action-btn" title="切換地面步行高度鎖定或自由飛行">
+        🚶 地面漫步模式：開
+      </button>
+      <button id="btn-pointer-lock" class="action-btn" title="點擊鎖定滑鼠以第一人稱沉浸漫遊 (按 ESC 退出)">
+        🎯 鎖定滑鼠視角
+      </button>
+      <button id="btn-auto-tour" class="action-btn" title="自動環遊八大關各大地標">
+        🎥 自動巡禮
+      </button>
+      <button id="btn-audio" class="action-btn" title="開啟太平灣海浪與海風環境音效">
+        🔊 海浪與海風音效：關
+      </button>
+    </div>
+  </div>
+
+  <!-- Load Three.js r128 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    // ============================================================================
+    // 1. LANDMARK & HISTORICAL DATA (100% Grounded in Qingdao Badaguan Sources)
+    // ============================================================================
+    const LANDMARKS = {
+      huashi: {
+        id: "huashi",
+        name: "花石樓（Huashi Villa）",
+        tag: "黃海路18號 · 歐洲古典城堡建築",
+        style: "1931年竣工 · 哥德與俄式古堡",
+        tree: "紫荊關路雪松 · 太平灣夕照",
+        desc: "坐落於八大關南端海岬，背靠八大關、面臨第二海水浴場。1930年由俄僑淶比池聘請中國設計師劉耀宸、王雲飛修建，外牆以花崗岩與帶色斑鵝卵石砌築，融合哥德式八角尖塔、雉堞式女兒牆、拜占庭門廊與旋轉露台，是觀賞太平灣夕照的絕佳位置。",
+        pos: { x: 54, y: 12.5, z: 68 },
+        lookAt: { x: 40, y: 8.5, z: 45 },
+        labelPos: { x: 40, y: 23, z: 45 },
+        color: "#e07a5f",
+        links: [
+          { label: "📖 觀海新聞：花石樓歷史考證", url: "https://m.guanhai.com.cn/p/11277.html" },
+          { label: "🏛️ 維基百科：八大關近代建築", url: "https://zh.wikipedia.org/zh-tw/%E5%85%AB%E5%A4%A7%E5%85%B3" }
+        ]
+      },
+      princess: {
+        id: "princess",
+        name: "公主樓（Princess Villa）",
+        tag: "居庸關路10號 · 丹麥北歐田園別墅",
+        style: "磚木三層 · 暗綠外牆與尖聳紅瓦",
+        tree: "居庸關路銀杏與五角楓",
+        desc: "位於居庸關路10號，呈現濃郁的北歐丹麥田園別墅風情。建築牆基由不規整花崗岩石塊砌成，外牆為醒目的暗綠色磚牆，屋脊雙面陡坡尖聳並配氣窗遠眺海濱，庭院內設有安徒生童話雕塑與綠茵草坪，門前居庸關路在深秋鋪滿金黃銀杏落葉。",
+        pos: { x: -16, y: 9.5, z: -4 },
+        lookAt: { x: -34, y: 7.5, z: -18 },
+        labelPos: { x: -34, y: 19.5, z: -18 },
+        color: "#48b89f",
+        links: [
+          { label: "🏰 指尖上全景：青島八大關公主樓", url: "https://www.zhijianshang.com/princess-villa-at-eight-great-passes/" },
+          { label: "📖 觀海新聞：公主樓童話入夢", url: "https://m.guanhai.com.cn/p/11277.html" }
+        ]
+      },
+      butterfly: {
+        id: "butterfly",
+        name: "蝴蝶樓（Butterfly Villa）",
+        tag: "山海關路21號 · 折衷主義影史名樓",
+        style: "1934年建 · 中俄建築師合璧設計",
+        tree: "山海關路法國梧桐林蔭道",
+        desc: "位於山海關路21號，由中國建築師劉耀宸與俄國建築師拉夫林且夫合璧設計。粉紅磚紅色牆體搭配純白門窗、立柱與弧形陽台，掩映於石砌院落與法國梧桐濃蔭之中。1935年影后胡蝶在此拍攝洪深編劇的電影《劫後桃花》，因而得名「蝴蝶樓」。",
+        pos: { x: -32, y: 8.5, z: 36 },
+        lookAt: { x: -48, y: 6.5, z: 20 },
+        labelPos: { x: -48, y: 16.5, z: 20 },
+        color: "#f28482",
+        links: [
+          { label: "🎬 青島新聞網：走進八大關蝴蝶樓", url: "https://news.qingdaonews.com/wap/2016-06/03/content_11628139_all.htm" },
+          { label: "🏖️ 攜程攻略：蝴蝶樓景點介紹", url: "https://gs.ctrip.com/html5/you/sight/qingdao5/2496967.html" }
+        ]
+      },
+      beach: {
+        id: "beach",
+        name: "第二海水浴場（太平角海水浴場）",
+        tag: "山海關路6號 · 太平灣半月形海灘",
+        style: "1934年闢建 · 花崗岩防波堤與礁石灘",
+        tree: "濱海黑松與木棧道",
+        desc: "地處匯泉灣東側的太平灣內，與八大關別墅區及花石樓緊鄰。坡緩沙軟、浪小水淨，長條形花崗岩防波堤伸入碧藍大海，是體會青島「紅瓦綠樹、碧海藍天」與海濱漫步最愜意的海岸線。",
+        pos: { x: -18, y: 7.0, z: 86 },
+        lookAt: { x: 18, y: 4.5, z: 58 },
+        labelPos: { x: -5, y: 8.5, z: 68 },
+        color: "#4ea8de",
+        links: [
+          { label: "🌊 第二海水浴場（太平灣）介紹", url: "https://zh.meet99.com/jingdian-dehsyc.html" },
+          { label: "🏛️ 維基百科：八大關風景區", url: "https://zh.wikipedia.org/zh-tw/%E5%85%AB%E5%A4%A7%E5%85%B3" }
+        ]
+      },
+      avenues: {
+        id: "avenues",
+        name: "一關一樹・落葉景觀大道",
+        tag: "韶關路 / 居庸關路 / 山海關路 / 紫荊關路",
+        style: "1930年代特別規定建築地（綠地>50%）",
+        tree: "韶關碧桃 · 居庸銀杏 · 嘉峪紅楓 · 紫荊雪松",
+        desc: "八大關以中國古代關隘命名十條馬路，素有「一關一樹、關關不同」之美譽：韶關路全植碧桃（春季粉紅如帶），居庸關路與嘉峪關路遍植銀杏與五角楓（深秋霜染金紅），山海關路法國梧桐蔽日，紫荊關路雪松四季常青，配以透空花崗岩柱圍牆，將公園與庭院融為一體。",
+        pos: { x: 4, y: 8.0, z: 8 },
+        lookAt: { x: 4, y: 6.5, z: -38 },
+        labelPos: { x: 4, y: 14.0, z: -22 },
+        color: "#f0b85c",
+        links: [
+          { label: "🍂 漫遊青島八大關：藏在紅瓦綠樹裡的海濱風情", url: "https://www.ourchinastory.com/cn/16993/%E6%BC%AB%E6%B8%B8%E9%9D%92%E5%B2%9B%E5%85%AB%E5%A4%A7%E5%85%B3-%E8%97%8F%E5%9C%A8%E7%BA%A2%E7%93%A6%E7%BB%BF%E6%A0%91%E9%87%8C%E7%9A%84%E6%B5%B7%E6%BB%A8%E9%A3%8E%E6%83%85" },
+          { label: "🌲 新浪山東：八大關一關一樹介紹", url: "http://sd.sina.com.cn/city/csts/2016-08-24/city-ifxvixeq0383955.shtml?from=wap" }
+        ]
+      },
+      overview: {
+        id: "overview",
+        name: "八大關與太平灣全景鳥瞰",
+        tag: "中國最美的城區 · 萬國建築博覽會",
+        style: "占地約 66.6 萬平方米 · 200餘棟歷史別墅",
+        tree: "紅瓦綠樹・碧海藍天立體畫卷",
+        desc: "俯瞰太平山南麓至太平灣岬角：翠綠雪松、金黃銀杏與法國梧桐層林盡染，德式、俄式、丹麥式與折衷主義紅瓦別墅錯落掩映於林間，南側緊依碧波萬頃的太平灣與第二海水浴場。",
+        pos: { x: 0, y: 58, z: 122 },
+        lookAt: { x: 4, y: 6, z: 10 },
+        labelPos: { x: 10, y: 26, z: -48 },
+        color: "#a8dadc",
+        links: [
+          { label: "🏛️ 維基百科：青島八大關近代建築列表", url: "https://zh.wikipedia.org/zh-cn/%E9%9D%92%E5%B2%9B%E5%85%AB%E5%A4%A7%E5%85%B3%E8%BF%91%E4%BB%A3%E5%BB%BA%E7%AD%91%E5%88%97%E8%A1%A8" },
+          { label: "🌊 漫遊青島八大關海濱風情", url: "https://www.ourchinastory.com/cn/16993/%E6%BC%AB%E6%B8%B8%E9%9D%92%E5%B2%9B%E5%85%AB%E5%A4%A7%E5%85%B3-%E8%97%8F%E5%9C%A8%E7%BA%A2%E7%93%A6%E7%BB%BF%E6%A0%91%E9%87%8C%E7%9A%84%E6%B5%B7%E6%BB%A8%E9%A3%8E%E6%83%85" }
+        ]
+      }
+    };
+
+    // ============================================================================
+    // 2. PROCEDURAL TEXTURE GENERATORS (Granite, Red Roof Tiles, Cobblestone, Windows)
+    // ============================================================================
+    function createGraniteTexture(baseHex = "#b8b0a4", cobble = true) {
+      const canvas = document.createElement("canvas");
+      canvas.width = 256;
+      canvas.height = 256;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = baseHex;
+      ctx.fillRect(0, 0, 256, 256);
+
+      // Fine mineral speckle
+      for (let i = 0; i < 4000; i++) {
+        const x = Math.random() * 256;
+        const y = Math.random() * 256;
+        const v = Math.floor(140 + Math.random() * 90);
+        ctx.fillStyle = `rgba(${v}, ${v - 8}, ${v - 16}, 0.25)`;
+        ctx.fillRect(x, y, 2, 2);
+      }
+
+      if (cobble) {
+        // Irregular granite blocks ("花石" / 青島花崗岩砌塊)
+        ctx.strokeStyle = "rgba(65, 58, 50, 0.55)";
+        ctx.lineWidth = 2;
+        const rows = 8;
+        const rowH = 256 / rows;
+        for (let r = 0; r < rows; r++) {
+          const y = r * rowH;
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(256, y);
+          ctx.stroke();
+
+          let x = (r % 2) * 18;
+          while (x < 256) {
+            const w = 26 + Math.random() * 22;
+            const tone = Math.random() * 30 - 15;
+            ctx.fillStyle = tone > 0 ? `rgba(235, 215, 195, 0.14)` : `rgba(80, 70, 60, 0.14)`;
+            ctx.fillRect(x + 2, y + 2, w - 4, rowH - 4);
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x, y + rowH);
+            ctx.stroke();
+            x += w;
+          }
+        }
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(3, 3);
+      return tex;
+    }
+
+    function createRoofTileTexture(baseHex = "#b83b28") {
+      const canvas = document.createElement("canvas");
+      canvas.width = 256;
+      canvas.height = 256;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = baseHex;
+      ctx.fillRect(0, 0, 256, 256);
+
+      // Marseille red clay roof tiles ("青島紅瓦")
+      const rows = 12;
+      const cols = 16;
+      const rw = 256 / cols;
+      const rh = 256 / rows;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const x = c * rw;
+          const y = r * rh;
+          const grad = ctx.createLinearGradient(x, y, x + rw, y + rh);
+          grad.addColorStop(0, "rgba(255, 140, 105, 0.25)");
+          grad.addColorStop(0.6, "rgba(160, 42, 24, 0.1)");
+          grad.addColorStop(1, "rgba(60, 15, 8, 0.45)");
+          ctx.fillStyle = grad;
+          ctx.fillRect(x, y, rw - 1, rh - 1);
+        }
+      }
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(4, 4);
+      return tex;
+    }
+
+    function createRoadCobbleTexture() {
+      const canvas = document.createElement("canvas");
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#525860";
+      ctx.fillRect(0, 0, 512, 512);
+
+      for (let i = 0; i < 6500; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const s = 1 + Math.random() * 3;
+        const b = Math.floor(65 + Math.random() * 45);
+        ctx.fillStyle = `rgba(${b}, ${b + 2}, ${b + 5}, 0.35)`;
+        ctx.fillRect(x, y, s, s);
+      }
+
+      // Subtle granite curb stripes
+      ctx.fillStyle = "#8c857b";
+      ctx.fillRect(0, 0, 28, 512);
+      ctx.fillRect(484, 0, 28, 512);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(1, 14);
+      return tex;
+    }
+
+    // ============================================================================
+    // 3. SCENE, CAMERA, RENDERER & LIGHTING INITIALIZATION
+    // ============================================================================
+    const container = document.getElementById("canvas-container");
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0xe8c49b, 0.0038);
+
+    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.3, 600);
+    camera.position.set(54, 12.5, 68);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
+    container.appendChild(renderer.domElement);
+
+    // Sky Dome Shader (Dynamic Rayleigh-like Atmospheric Gradient + Sun Disc + Stars)
+    const skyGeo = new THREE.SphereGeometry(450, 48, 32);
+    const skyUniforms = {
+      uTopColor: { value: new THREE.Color(0x2b5876) },
+      uHorizonColor: { value: new THREE.Color(0xf4a261) },
+      uBottomColor: { value: new THREE.Color(0x1d3557) },
+      uSunDir: { value: new THREE.Vector3(-0.6, 0.25, -0.4).normalize() },
+      uSunColor: { value: new THREE.Color(0xffd166) },
+      uStarIntensity: { value: 0.0 }
+    };
+
+    const skyMat = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      depthWrite: false,
+      uniforms: skyUniforms,
+      vertexShader: `
+        varying vec3 vWorldPos;
+        void main() {
+          vec4 wp = modelMatrix * vec4(position, 1.0);
+          vWorldPos = wp.xyz;
+          gl_Position = projectionMatrix * viewMatrix * wp;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vWorldPos;
+        uniform vec3 uTopColor;
+        uniform vec3 uHorizonColor;
+        uniform vec3 uBottomColor;
+        uniform vec3 uSunDir;
+        uniform vec3 uSunColor;
+        uniform float uStarIntensity;
+
+        float hash(vec3 p) {
+          p = fract(p * 0.3183099 + .1);
+          p *= 17.0;
+          return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+        }
+
+        void main() {
+          vec3 dir = normalize(vWorldPos);
+          float h = clamp(dir.y, 0.0, 1.0);
+          vec3 col = mix(uHorizonColor, uTopColor, pow(h, 0.55));
+          if (dir.y < 0.0) {
+            col = mix(uHorizonColor, uBottomColor, clamp(-dir.y * 3.0, 0.0, 1.0));
+          }
+
+          // Sun halo & disc
+          float sunAmt = max(dot(dir, uSunDir), 0.0);
+          col += uSunColor * pow(sunAmt, 12.0) * 0.38;
+          col += vec3(1.0, 0.97, 0.88) * smoothstep(0.996, 0.9992, sunAmt);
+
+          // Night stars
+          if (uStarIntensity > 0.01 && dir.y > 0.05) {
+            float s = hash(floor(dir * 380.0));
+            if (s > 0.994) {
+              float twinkle = smoothstep(0.994, 1.0, s) * dir.y;
+              col += vec3(0.9, 0.95, 1.0) * twinkle * uStarIntensity * 1.6;
+            }
+          }
+
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `
+    });
+    const skyDome = new THREE.Mesh(skyGeo, skyMat);
+    scene.add(skyDome);
+
+    // Lighting Setup
+    const hemiLight = new THREE.HemisphereLight(0xfff1d6, 0x3d5a45, 0.65);
+    scene.add(hemiLight);
+
+    const sunLight = new THREE.DirectionalLight(0xffb86c, 1.45);
+    sunLight.position.set(-85, 42, -55);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.camera.near = 10;
+    sunLight.shadow.camera.far = 280;
+    const d = 115;
+    sunLight.shadow.camera.left = -d;
+    sunLight.shadow.camera.right = d;
+    sunLight.shadow.camera.top = d;
+    sunLight.shadow.camera.bottom = -d;
+    sunLight.shadow.bias = -0.0005;
+    scene.add(sunLight);
+
+    // Shared Materials & Textures
+    const graniteTex = createGraniteTexture("#b8afa2", true);
+    const pinkGraniteTex = createGraniteTexture("#c8a998", true);
+    const redRoofTex = createRoofTileTexture("#b83925");
+    const roadTex = createRoadCobbleTexture();
+
+    const matRedRoof = new THREE.MeshStandardMaterial({
+      map: redRoofTex,
+      roughness: 0.65,
+      metalness: 0.08
+    });
+
+    const matGranite = new THREE.MeshStandardMaterial({
+      map: graniteTex,
+      roughness: 0.85,
+      metalness: 0.05
+    });
+
+    const matPinkGranite = new THREE.MeshStandardMaterial({
+      map: pinkGraniteTex,
+      roughness: 0.82,
+      metalness: 0.05
+    });
+
+    const matWhiteTrim = new THREE.MeshStandardMaterial({
+      color: 0xf4f1ea,
+      roughness: 0.5
+    });
+
+    // Night-illuminated window material (shared so we can adjust emissive intensity by time of day)
+    const matWindowGlass = new THREE.MeshStandardMaterial({
+      color: 0x3b526b,
+      emissive: 0xffb347,
+      emissiveIntensity: 0.35,
+      roughness: 0.15,
+      metalness: 0.7
+    });
+
+    // ============================================================================
+    // 4. TERRAIN, TAIPING BAY OCEAN, SECOND BATHING BEACH & CAPE PROMONTORY
+    // ============================================================================
+    // Terrain height helper: gentle slope from north (z = -100, y = 7.5) down to south coast (z = 42, y = 2.2)
+    function getGroundHeight(x, z) {
+      // Huashi Villa rocky promontory at (x: 40, z: 45)
+      const distCape = Math.hypot(x - 40, z - 46);
+      if (distCape < 22) {
+        return 3.5 + Math.cos((distCape / 22) * Math.PI * 0.5) * 2.2;
+      }
+      if (z > 42) {
+        // Sloping down into beach and sea
+        return Math.max(-2.5, 2.2 - (z - 42) * 0.14);
+      }
+      // Gentle hillside slope northwards toward Taiping Mountain
+      return 2.2 + Math.max(0, (42 - z) * 0.042);
+    }
+
+    // Main Parkland Terrain Mesh (North of coastline)
+    const terrainGeo = new THREE.PlaneGeometry(240, 175, 96, 72);
+    terrainGeo.rotateX(-Math.PI / 2);
+    const posAttr = terrainGeo.attributes.position;
+    const colorsAttr = [];
+    const cGrass = new THREE.Color(0x4b7043);
+    const cSand = new THREE.Color(0xe6cf9e);
+    const cRock = new THREE.Color(0x8d8274);
+
+    for (let i = 0; i < posAttr.count; i++) {
+      const vx = posAttr.getX(i);
+      const vz = posAttr.getZ(i) - 18; // Shift so terrain covers z = -105 to +70
+      posAttr.setZ(i, vz);
+      const vy = getGroundHeight(vx, vz);
+      posAttr.setY(i, vy);
+
+      // Vertex coloring for grass, sandy beach, and rocky cape
+      const distCape = Math.hypot(vx - 40, vz - 46);
+      let col = cGrass.clone();
+      if (distCape < 24 && vz > 28) {
+        col.lerp(cRock, 0.75);
+      } else if (vz > 35) {
+        const t = Math.min(1, (vz - 35) / 14);
+        col.lerp(cSand, t);
+      } else {
+        // Subtle organic lawn variation
+        const n = (Math.sin(vx * 0.12) * Math.cos(vz * 0.12)) * 0.06;
+        col.offsetHSL(0, 0, n);
+      }
+      colorsAttr.push(col.r, col.g, col.b);
+    }
+    terrainGeo.setAttribute("color", new THREE.Float32BufferAttribute(colorsAttr, 3));
+    terrainGeo.computeVertexNormals();
+
+    const terrainMat = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.92,
+      metalness: 0.02
+    });
+    const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
+    terrainMesh.receiveShadow = true;
+    scene.add(terrainMesh);
+
+    // Animated Taiping Bay Ocean Shader (South of Badaguan)
+    const oceanGeo = new THREE.PlaneGeometry(520, 320, 128, 80);
+    oceanGeo.rotateX(-Math.PI / 2);
+    const oceanUniforms = {
+      uTime: { value: 0 },
+      uSunDir: { value: skyUniforms.uSunDir.value },
+      uSunColor: { value: new THREE.Color(0xffc878) },
+      uDeepColor: { value: new THREE.Color(0x0d3b5c) },
+      uShallowColor: { value: new THREE.Color(0x1f7a8c) }
+    };
+
+    const oceanMat = new THREE.ShaderMaterial({
+      transparent: true,
+      uniforms: oceanUniforms,
+      vertexShader: `
+        uniform float uTime;
+        varying vec3 vWorldPos;
+        varying float vWaveHeight;
+        void main() {
+          vec3 p = position;
+          float w1 = sin(p.x * 0.12 + uTime * 1.6) * cos(p.z * 0.15 + uTime * 1.2) * 0.28;
+          float w2 = sin(p.x * 0.27 - uTime * 2.1 + p.z * 0.22) * 0.12;
+          p.y += w1 + w2;
+          vWaveHeight = w1 + w2;
+          vec4 wp = modelMatrix * vec4(p, 1.0);
+          vWorldPos = wp.xyz;
+          gl_Position = projectionMatrix * viewMatrix * wp;
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform vec3 uSunDir;
+        uniform vec3 uSunColor;
+        uniform vec3 uDeepColor;
+        uniform vec3 uShallowColor;
+        varying vec3 vWorldPos;
+        varying float vWaveHeight;
+
+        void main() {
+          // Distance from shore (shoreline roughly around z = 48..54)
+          float shoreDist = vWorldPos.z - 49.0;
+          float shallowFactor = clamp(1.0 - shoreDist / 45.0, 0.0, 1.0);
+          vec3 waterCol = mix(uDeepColor, uShallowColor, shallowFactor);
+
+          // Wave normal approximation for sparkling specular reflection
+          vec3 norm = normalize(vec3(
+            cos(vWorldPos.x * 0.18 + uTime * 1.6) * 0.16,
+            1.0,
+            sin(vWorldPos.z * 0.22 + uTime * 1.4) * 0.16
+          ));
+          vec3 viewDir = normalize(cameraPosition - vWorldPos);
+          vec3 halfVec = normalize(uSunDir + viewDir);
+          float spec = pow(max(dot(norm, halfVec), 0.0), 90.0);
+
+          // Animated whitewash foam near beach & cape
+          float foamBand = sin(shoreDist * 0.9 - uTime * 3.2);
+          float foam = smoothstep(0.65, 0.95, foamBand) * smoothstep(18.0, 0.0, abs(shoreDist));
+
+          vec3 finalCol = waterCol + uSunColor * spec * 1.35 + vec3(0.95, 0.97, 1.0) * foam * 0.55;
+          gl_FragColor = vec4(finalCol, 0.92);
+        }
+      `
+    });
+    const oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
+    oceanMesh.position.set(0, 0.2, 195);
+    scene.add(oceanMesh);
+
+    // Second Bathing Beach Breakwater Jetty (第二海水浴場花崗岩防波堤)
+    const jettyGroup = new THREE.Group();
+    const jettyMain = new THREE.Mesh(new THREE.BoxGeometry(5.2, 2.6, 52), matGranite);
+    jettyMain.position.set(-18, 1.1, 72);
+    jettyMain.castShadow = true;
+    jettyMain.receiveShadow = true;
+    jettyGroup.add(jettyMain);
+
+    // Red-and-white beacon lighthouse at the end of the breakwater
+    const beaconBase = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.4, 5.5, 12), matWhiteTrim);
+    beaconBase.position.set(-18, 4.8, 96);
+    beaconBase.castShadow = true;
+    jettyGroup.add(beaconBase);
+
+    const beaconTop = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 1.4, 12), matRedRoof);
+    beaconTop.position.set(-18, 8.1, 96);
+    jettyGroup.add(beaconTop);
+
+    const beaconLantern = new THREE.Mesh(
+      new THREE.SphereGeometry(0.65, 12, 12),
+      new THREE.MeshBasicMaterial({ color: 0xffe699 })
+    );
+    beaconLantern.position.set(-18, 9.2, 96);
+    jettyGroup.add(beaconLantern);
+    scene.add(jettyGroup);
+
+    // Coastal Seawall & Promenade along Huanghai Rd / Shanhaiguan Rd (濱海堤岸與木棧道)
+    const seawallMesh = new THREE.Mesh(new THREE.BoxGeometry(150, 2.4, 2.2), matGranite);
+    seawallMesh.position.set(-12, 1.8, 42.5);
+    seawallMesh.castShadow = true;
+    seawallMesh.receiveShadow = true;
+    scene.add(seawallMesh);
+
+    // Rocky boulders around Huashi Villa Cape (花石樓海岬礁石群)
+    const rockGeo = new THREE.DodecahedronGeometry(1, 1);
+    const rockMat = new THREE.MeshStandardMaterial({ color: 0x8c7b6b, roughness: 0.9 });
+    for (let i = 0; i < 42; i++) {
+      const angle = (i / 42) * Math.PI * 1.35 - 0.3;
+      const rad = 16 + Math.random() * 8;
+      const rx = 40 + Math.cos(angle) * rad;
+      const rz = 46 + Math.sin(angle) * rad;
+      const rMesh = new THREE.Mesh(rockGeo, rockMat);
+      const sx = 1.5 + Math.random() * 3.2;
+      const sy = 1.0 + Math.random() * 2.2;
+      const sz = 1.5 + Math.random() * 3.0;
+      rMesh.scale.set(sx, sy, sz);
+      rMesh.position.set(rx, 0.8 + Math.random() * 1.4, rz);
+      rMesh.rotation.set(Math.random(), Math.random(), Math.random());
+      rMesh.castShadow = true;
+      rMesh.receiveShadow = true;
+      scene.add(rMesh);
+    }
+
+    // ============================================================================
+    // 5. AUTHENTIC BADAGUAN AVENUE NETWORK & GRANITE FENCES ("八大關路網與透空圍牆")
+    // ============================================================================
+    const roadsGroup = new THREE.Group();
+    const matRoad = new THREE.MeshStandardMaterial({
+      map: roadTex,
+      roughness: 0.88,
+      metalness: 0.05
+    });
+
+    function addAvenue(x, z, width, length, isHorizontal = false) {
+      const geo = new THREE.PlaneGeometry(width, length, 16, 32);
+      geo.rotateX(-Math.PI / 2);
+      if (isHorizontal) geo.rotateY(Math.PI / 2);
+      const pos = geo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const wx = x + pos.getX(i);
+        const wz = z + pos.getZ(i);
+        pos.setY(i, getGroundHeight(wx, wz) + 0.08);
+      }
+      geo.computeVertexNormals();
+      const mesh = new THREE.Mesh(geo, matRoad);
+      mesh.position.set(x, 0, z);
+      mesh.receiveShadow = true;
+      roadsGroup.add(mesh);
+    }
+
+    // North-South Avenues:
+    // 1. 紫荊關路 (Zijingguan Rd, East N-S, leading straight to Huashi Villa): x = 28
+    addAvenue(28, -12, 7.5, 108, false);
+    // 2. 韶關路 (Shaoguan Rd, Center N-S, Peach Blossom Ave): x = 0
+    addAvenue(0, -15, 7.5, 102, false);
+    // 3. 寧武關路 (Ningwuguan Rd, West N-S): x = -64
+    addAvenue(-64, -15, 7.0, 102, false);
+
+    // East-West Avenues:
+    // 4. 山海關路 (Shanhaiguan Rd, Coastal Sycamore Ave): z = 34
+    addAvenue(-8, 34, 8.0, 156, true);
+    // 5. 居庸關路 (Juyongguan Rd, Ginkgo & Princess Villa Ave): z = -6
+    addAvenue(-8, -6, 7.8, 156, true);
+    // 6. 嘉峪關路 (Jiayuguan Rd, Crimson Maple Ave): z = -44
+    addAvenue(-8, -44, 7.5, 156, true);
+
+    scene.add(roadsGroup);
+
+    // Golden Fallen Leaf Carpet along Juyongguan Rd & Shanhaiguan Rd ("落葉景觀大道滿地金黃")
+    const leafCarpetGroup = new THREE.Group();
+    const carpetMat = new THREE.MeshStandardMaterial({
+      color: 0xe6a832,
+      roughness: 0.9,
+      transparent: true,
+      opacity: 0.85
+    });
+    for (let i = 0; i < 95; i++) {
+      const isJuyong = i < 55;
+      const cx = -65 + Math.random() * 115;
+      const cz = (isJuyong ? -6 : 34) + (Math.random() > 0.5 ? 1 : -1) * (3.2 + Math.random() * 2.5);
+      const cy = getGroundHeight(cx, cz) + 0.11;
+      const patch = new THREE.Mesh(new THREE.CircleGeometry(0.9 + Math.random() * 1.4, 8), carpetMat);
+      patch.rotation.x = -Math.PI / 2;
+      patch.position.set(cx, cy, cz);
+      leafCarpetGroup.add(patch);
+    }
+    scene.add(leafCarpetGroup);
+
+    // Signature Badaguan Semi-Transparent Granite Pillar & Wrought-Iron Fences ("透空花崗岩柱圍牆")
+    function buildCourtyardFence(minX, maxX, minZ, maxZ, gateSide = "south") {
+      const fenceGroup = new THREE.Group();
+      const matIron = new THREE.MeshStandardMaterial({ color: 0x22282e, metalness: 0.6, roughness: 0.4 });
+
+      function addSegment(x1, z1, x2, z2, hasGate) {
+        const dist = Math.hypot(x2 - x1, z2 - z1);
+        const steps = Math.max(2, Math.floor(dist / 4.2));
+        for (let i = 0; i <= steps; i++) {
+          const t = i / steps;
+          const px = x1 + (x2 - x1) * t;
+          const pz = z1 + (z2 - z1) * t;
+          const py = getGroundHeight(px, pz);
+
+          // Skip middle pillar for gate opening
+          if (hasGate && Math.abs(t - 0.5) < 0.12) continue;
+
+          const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.65, 0.55), matGranite);
+          pillar.position.set(px, py + 0.82, pz);
+          pillar.castShadow = true;
+          fenceGroup.add(pillar);
+
+          const cap = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.18, 0.68), matWhiteTrim);
+          cap.position.set(px, py + 1.7, pz);
+          fenceGroup.add(cap);
+
+          if (i < steps) {
+            const nx = x1 + (x2 - x1) * ((i + 1) / steps);
+            const nz = z1 + (z2 - z1) * ((i + 1) / steps);
+            const midT = (i + 0.5) / steps;
+            if (hasGate && Math.abs(midT - 0.5) < 0.16) continue;
+
+            const mx = (px + nx) * 0.5;
+            const mz = (pz + nz) * 0.5;
+            const my = getGroundHeight(mx, mz);
+            const segLen = Math.hypot(nx - px, nz - pz);
+            const angle = Math.atan2(nz - pz, nx - px);
+
+            const baseWall = new THREE.Mesh(new THREE.BoxGeometry(segLen, 0.55, 0.35), matGranite);
+            baseWall.position.set(mx, my + 0.27, mz);
+            baseWall.rotation.y = -angle;
+            fenceGroup.add(baseWall);
+
+            const ironRail = new THREE.Mesh(new THREE.BoxGeometry(segLen, 0.85, 0.08), matIron);
+            ironRail.position.set(mx, my + 1.05, mz);
+            ironRail.rotation.y = -angle;
+            fenceGroup.add(ironRail);
+          }
+        }
+      }
+
+      addSegment(minX, maxZ, maxX, maxZ, gateSide === "south");
+      addSegment(minX, minZ, maxX, minZ, gateSide === "north");
+      addSegment(minX, minZ, minX, maxZ, gateSide === "west");
+      addSegment(maxX, minZ, maxX, maxZ, gateSide === "east");
+      scene.add(fenceGroup);
+    }
+
+    // ============================================================================
+    // 6. ICONIC ARCHITECTURAL MONUMENTS (Huashi Villa, Princess Villa, Butterfly Villa)
+    // ============================================================================
+
+    // --- 6.1 花石樓 (Huashi Villa, 黃海路18號) ---
+    function buildHuashiVilla() {
+      const group = new THREE.Group();
+      const bx = 40, bz = 45;
+      const by = getGroundHeight(bx, bz);
+      group.position.set(bx, by, bz);
+
+      // Raised stone castle terrace foundation
+      const plinth = new THREE.Mesh(new THREE.CylinderGeometry(11.5, 13.0, 2.2, 16), matGranite);
+      plinth.position.set(0, 1.1, 0);
+      plinth.castShadow = true;
+      plinth.receiveShadow = true;
+      group.add(plinth);
+
+      // Main 4-story Baroque/Gothic Granite Castle Keep
+      const mainBody = new THREE.Mesh(new THREE.BoxGeometry(10.5, 11.2, 9.2), matGranite);
+      mainBody.position.set(-1.2, 6.6, -0.5);
+      mainBody.castShadow = true;
+      mainBody.receiveShadow = true;
+      group.add(mainBody);
+
+      // Pitched Red Tile Roof on Main Keep
+      const mainRoof = new THREE.Mesh(new THREE.ConeGeometry(8.2, 4.8, 4), matRedRoof);
+      mainRoof.position.set(-1.2, 14.6, -0.5);
+      mainRoof.rotation.y = Math.PI / 4;
+      mainRoof.castShadow = true;
+      group.add(mainRoof);
+
+      // Iconic Octagonal Gothic Watchtower ("哥德式八角尖塔與雉堞式女兒牆")
+      const tower = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.5, 15.8, 8), matPinkGranite);
+      tower.position.set(4.2, 8.8, 2.8);
+      tower.castShadow = true;
+      tower.receiveShadow = true;
+      group.add(tower);
+
+      // Crenellated Battlements Ring (雉堞式女兒牆)
+      const battlementRing = new THREE.Mesh(new THREE.CylinderGeometry(3.55, 3.4, 1.2, 8), matGranite);
+      battlementRing.position.set(4.2, 16.5, 2.8);
+      group.add(battlementRing);
+
+      for (let i = 0; i < 8; i++) {
+        const ang = (i / 8) * Math.PI * 2;
+        const merlon = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.85, 0.55), matGranite);
+        merlon.position.set(4.2 + Math.cos(ang) * 3.3, 17.4, 2.8 + Math.sin(ang) * 3.3);
+        merlon.rotation.y = -ang + Math.PI / 2;
+        group.add(merlon);
+      }
+
+      // Steep Octagonal Red Tile Spire (八角紅瓦尖頂)
+      const spire = new THREE.Mesh(new THREE.ConeGeometry(3.3, 5.8, 8), matRedRoof);
+      spire.position.set(4.2, 19.8, 2.8);
+      spire.castShadow = true;
+      group.add(spire);
+
+      // Circular Sea-Viewing Terrace & Curved Exterior Staircase ("旋轉式露台與觀海台")
+      const seaBalcony = new THREE.Mesh(new THREE.CylinderGeometry(4.8, 4.8, 3.8, 16), matGranite);
+      seaBalcony.position.set(-1.5, 3.8, 4.5);
+      seaBalcony.castShadow = true;
+      group.add(seaBalcony);
+
+      const balconyRail = new THREE.Mesh(new THREE.CylinderGeometry(5.0, 5.0, 0.9, 16), matWhiteTrim);
+      balconyRail.position.set(-1.5, 6.0, 4.5);
+      group.add(balconyRail);
+
+      // Pointed Gothic Windows (哥德式尖拱券窗)
+      for (let floor = 0; floor < 3; floor++) {
+        const wy = 4.2 + floor * 3.2;
+        for (let side = -1; side <= 1; side += 1) {
+          const win = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.1, 0.3), matWindowGlass);
+          win.position.set(-1.2 + side * 2.6, wy, 4.15);
+          group.add(win);
+
+          const winBack = win.clone();
+          winBack.position.set(-1.2 + side * 2.6, wy, -5.15);
+          group.add(winBack);
+        }
+        // Tower windows facing the sea
+        const tWin = new THREE.Mesh(new THREE.BoxGeometry(0.95, 2.0, 0.3), matWindowGlass);
+        tWin.position.set(4.2, 5.0 + floor * 3.6, 6.15);
+        group.add(tWin);
+      }
+
+      scene.add(group);
+    }
+    buildHuashiVilla();
+
+    // --- 6.2 公主樓 (Princess Villa, 居庸關路10號) ---
+    function buildPrincessVilla() {
+      const group = new THREE.Group();
+      const bx = -34, bz = -18;
+      const by = getGroundHeight(bx, bz);
+      group.position.set(bx, by, bz);
+
+      // Danish Emerald-Mint Green Exterior Brick Material ("暗綠色外牆")
+      const matDanishGreen = new THREE.MeshStandardMaterial({
+        color: 0x2a7b6c,
+        roughness: 0.72
+      });
+
+      // Irregular Granite Base ("不規整花崗岩石塊牆基")
+      const base = new THREE.Mesh(new THREE.BoxGeometry(11.6, 1.8, 9.6), matGranite);
+      base.position.set(0, 0.9, 0);
+      base.castShadow = true;
+      base.receiveShadow = true;
+      group.add(base);
+
+      // Main Mint-Green Brick Body
+      const body = new THREE.Mesh(new THREE.BoxGeometry(11.0, 6.6, 9.0), matDanishGreen);
+      body.position.set(0, 5.1, 0);
+      body.castShadow = true;
+      body.receiveShadow = true;
+      group.add(body);
+
+      // Steep Double-Sloped Nordic Red Tile Roof ("屋脊雙面陡坡尖聳")
+      const roofShape = new THREE.Shape();
+      roofShape.moveTo(-6.2, 0);
+      roofShape.lineTo(6.2, 0);
+      roofShape.lineTo(0, 6.8);
+      roofShape.closePath();
+
+      const extrudeSettings = { depth: 9.8, bevelEnabled: false };
+      const steepRoofGeo = new THREE.ExtrudeGeometry(roofShape, extrudeSettings);
+      steepRoofGeo.center();
+      const steepRoof = new THREE.Mesh(steepRoofGeo, matRedRoof);
+      steepRoof.position.set(0, 11.7, 0);
+      steepRoof.castShadow = true;
+      group.add(steepRoof);
+
+      // Cross Gable Wing facing South toward Juyongguan Rd
+      const southGable = new THREE.Mesh(new THREE.BoxGeometry(5.2, 7.2, 3.2), matDanishGreen);
+      southGable.position.set(1.5, 5.4, 4.2);
+      southGable.castShadow = true;
+      group.add(southGable);
+
+      const gableRoof = new THREE.Mesh(new THREE.ConeGeometry(4.2, 4.5, 4), matRedRoof);
+      gableRoof.position.set(1.5, 11.2, 4.2);
+      gableRoof.rotation.y = Math.PI / 4;
+      gableRoof.castShadow = true;
+      group.add(gableRoof);
+
+      // White & Green Mosaic Window Frames + Dormer Windows ("氣窗可遠眺海濱，白色與綠色馬賽克嵌飾")
+      for (let row = 0; row < 2; row++) {
+        for (let col = -1; col <= 1; col++) {
+          const frame = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.9, 0.25), matWhiteTrim);
+          frame.position.set(col * 3.1, 3.6 + row * 3.1, 4.55);
+          group.add(frame);
+
+          const pane = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.5, 0.3), matWindowGlass);
+          pane.position.set(col * 3.1, 3.6 + row * 3.1, 4.58);
+          group.add(pane);
+        }
+      }
+
+      // Southern Entrance Square Terrace & 2nd Floor Open Balcony
+      const porch = new THREE.Mesh(new THREE.BoxGeometry(4.8, 1.6, 3.4), matGranite);
+      porch.position.set(1.5, 0.8, 6.4);
+      group.add(porch);
+
+      const balcony = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.9, 2.2), matWhiteTrim);
+      balcony.position.set(1.5, 5.2, 6.2);
+      group.add(balcony);
+
+      // Andersen Bronze Statue & Fairy-tale Courtyard Pedestal ("院內安徒生銅像與童話雕塑")
+      const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.85, 1.3, 8), matGranite);
+      pedestal.position.set(-4.2, 0.65, 6.8);
+      group.add(pedestal);
+      const statue = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.35, 0.45, 1.8, 8),
+        new THREE.MeshStandardMaterial({ color: 0x5c4d3c, metalness: 0.7, roughness: 0.3 })
+      );
+      statue.position.set(-4.2, 2.1, 6.8);
+      group.add(statue);
+
+      scene.add(group);
+      buildCourtyardFence(-45, -22, -28, -10.5, "south");
+    }
+    buildPrincessVilla();
+
+    // --- 6.3 蝴蝶樓 (Butterfly Villa, 山海關路21號) ---
+    function buildButterflyVilla() {
+      const group = new THREE.Group();
+      const bx = -48, bz = 20;
+      const by = getGroundHeight(bx, bz);
+      group.position.set(bx, by, bz);
+
+      // Terracotta-Pink Eclectic Wall Material ("粉紅/磚紅色牆體配白色門窗立柱與弧形陽台")
+      const matButterflyPink = new THREE.MeshStandardMaterial({
+        color: 0xd97f76,
+        roughness: 0.68
+      });
+
+      const base = new THREE.Mesh(new THREE.BoxGeometry(11.4, 1.4, 9.4), matGranite);
+      base.position.set(0, 0.7, 0);
+      base.castShadow = true;
+      group.add(base);
+
+      // 2-Story Main Eclectic Villa Body
+      const body = new THREE.Mesh(new THREE.BoxGeometry(10.8, 6.8, 8.8), matButterflyPink);
+      body.position.set(0, 4.8, 0);
+      body.castShadow = true;
+      body.receiveShadow = true;
+      group.add(body);
+
+      // Curved Corner Semicircular Bay & White Balustrade Balcony ("轉角弧形陽台與白色立柱")
+      const bayBottom = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 2.8, 3.6, 16), matButterflyPink);
+      bayBottom.position.set(4.2, 3.2, 3.2);
+      bayBottom.castShadow = true;
+      group.add(bayBottom);
+
+      const bayBalcony = new THREE.Mesh(new THREE.CylinderGeometry(3.05, 3.05, 1.0, 16), matWhiteTrim);
+      bayBalcony.position.set(4.2, 5.4, 3.2);
+      group.add(bayBalcony);
+
+      // White Classical Columns supporting the upper loggia
+      for (let i = 0; i < 4; i++) {
+        const ang = (i / 3) * Math.PI * 0.75 - 0.2;
+        const col = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.25, 3.2, 10), matWhiteTrim);
+        col.position.set(4.2 + Math.cos(ang) * 2.5, 6.8, 3.2 + Math.sin(ang) * 2.5);
+        group.add(col);
+      }
+
+      // Red Hipped Roof
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(8.4, 3.8, 4), matRedRoof);
+      roof.position.set(0, 10.1, 0);
+      roof.rotation.y = Math.PI / 4;
+      roof.castShadow = true;
+      group.add(roof);
+
+      // White Corner Quoins & Window Frames
+      for (let r = 0; r < 2; r++) {
+        for (let c = -1; c <= 0; c++) {
+          const wFrame = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2.0, 0.25), matWhiteTrim);
+          wFrame.position.set(c * 3.0 - 0.5, 3.4 + r * 3.2, 4.45);
+          group.add(wFrame);
+
+          const wGlass = new THREE.Mesh(new THREE.BoxGeometry(1.15, 1.65, 0.3), matWindowGlass);
+          wGlass.position.set(c * 3.0 - 0.5, 3.4 + r * 3.2, 4.48);
+          group.add(wGlass);
+        }
+      }
+
+      scene.add(group);
+      buildCourtyardFence(-58, -37, 11, 29.5, "south");
+    }
+    buildButterflyVilla();
+
+    // --- 6.4 Additional Historic German & European Red-Roof Villas ("萬國建築博覽會別墅群") ---
+    function buildHistoricVilla(x, z, wallColorHex, scale = 1.0, gateSide = "south") {
+      const group = new THREE.Group();
+      const y = getGroundHeight(x, z);
+      group.position.set(x, y, z);
+      group.scale.setScalar(scale);
+
+      const wallMat = new THREE.MeshStandardMaterial({ color: wallColorHex, roughness: 0.75 });
+      const base = new THREE.Mesh(new THREE.BoxGeometry(9.6, 1.4, 8.2), matGranite);
+      base.position.y = 0.7;
+      base.castShadow = true;
+      group.add(base);
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(9.0, 6.2, 7.6), wallMat);
+      body.position.y = 4.5;
+      body.castShadow = true;
+      body.receiveShadow = true;
+      group.add(body);
+
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(7.2, 4.2, 4), matRedRoof);
+      roof.position.y = 9.7;
+      roof.rotation.y = Math.PI / 4;
+      roof.castShadow = true;
+      group.add(roof);
+
+      // Turret annex
+      const annex = new THREE.Mesh(new THREE.BoxGeometry(4.2, 7.4, 4.2), wallMat);
+      annex.position.set(3.2, 5.1, 2.2);
+      annex.castShadow = true;
+      group.add(annex);
+
+      const annexRoof = new THREE.Mesh(new THREE.ConeGeometry(3.5, 3.6, 4), matRedRoof);
+      annexRoof.position.set(3.2, 10.6, 2.2);
+      annexRoof.rotation.y = Math.PI / 4;
+      annexRoof.castShadow = true;
+      group.add(annexRoof);
+
+      // Windows
+      for (let f = 0; f < 2; f++) {
+        for (let s = -1; s <= 1; s++) {
+          const win = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.6, 0.25), matWindowGlass);
+          win.position.set(s * 2.5, 3.2 + f * 2.9, 3.82);
+          group.add(win);
+        }
+      }
+
+      scene.add(group);
+      buildCourtyardFence(x - 9.5, x + 9.5, z - 8.5, z + 8.5, gateSide);
+    }
+
+    // Populate garden villas across the blocks (keeping <50% building density per 1930s regulation)
+    buildHistoricVilla(14, 16, 0xf2e3c6, 1.05, "south");    // Cream German Villa between Shaoguan & Zijingguan
+    buildHistoricVilla(-16, 16, 0xe8d5b7, 0.95, "south");   // Warm Ocher Villa
+    buildHistoricVilla(14, -24, 0xead2ac, 1.0, "south");    // Marshal's Villa style near Juyongguan & Shaoguan
+    buildHistoricVilla(48, 12, 0xf4e8d1, 1.0, "west");      // East Zijingguan Villa
+    buildHistoricVilla(48, -24, 0xdfc7a7, 0.95, "west");    // Northeast Villa
+    buildHistoricVilla(-34, -58, 0xf0dec2, 1.0, "south");   // North of Jiayuguan Rd
+    buildHistoricVilla(14, -60, 0xe5ceb0, 1.05, "south");   // North Shaoguan Villa
+
+    // ============================================================================
+    // 7. "一關一樹、關關不同" FOLIAGE SYSTEM & SEASONAL TRANSFORMATIONS
+    // ============================================================================
+    const matTrunk = new THREE.MeshStandardMaterial({ color: 0x4a3728, roughness: 0.9 });
+    const matPineTrunk = new THREE.MeshStandardMaterial({ color: 0x3b2d22, roughness: 0.92 });
+
+    // Dynamic seasonal foliage materials so switching seasons updates all avenues seamlessly
+    const matSycamoreFoliage = new THREE.MeshStandardMaterial({ color: 0xd99b26, roughness: 0.8 }); // 山海關路法國梧桐
+    const matGinkgoFoliage = new THREE.MeshStandardMaterial({ color: 0xf4b925, roughness: 0.75 });   // 居庸關路銀杏
+    const matMapleFoliage = new THREE.MeshStandardMaterial({ color: 0xc83e2b, roughness: 0.78 });    // 嘉峪關路五角楓
+    const matPeachFoliage = new THREE.MeshStandardMaterial({ color: 0x6ea84f, roughness: 0.8 });     // 韶關路碧桃
+    const matCedarFoliage = new THREE.MeshStandardMaterial({ color: 0x1e4d38, roughness: 0.85 });    // 紫荊關路雪松 (常青)
+
+    const treesGroup = new THREE.Group();
+
+    function addDeciduousTree(x, z, foliageMat, scale = 1.0) {
+      const y = getGroundHeight(x, z);
+      const tGroup = new THREE.Group();
+      tGroup.position.set(x, y, z);
+      tGroup.scale.setScalar(scale);
+
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.38, 3.8, 7), matTrunk);
+      trunk.position.y = 1.9;
+      trunk.castShadow = true;
+      tGroup.add(trunk);
+
+      const crown1 = new THREE.Mesh(new THREE.DodecahedronGeometry(2.3, 1), foliageMat);
+      crown1.position.set(0, 4.8, 0);
+      crown1.castShadow = true;
+      crown1.receiveShadow = true;
+      tGroup.add(crown1);
+
+      const crown2 = new THREE.Mesh(new THREE.DodecahedronGeometry(1.7, 1), foliageMat);
+      crown2.position.set(1.1, 5.6, 0.6);
+      crown2.castShadow = true;
+      tGroup.add(crown2);
+
+      const crown3 = new THREE.Mesh(new THREE.DodecahedronGeometry(1.6, 1), foliageMat);
+      crown3.position.set(-1.0, 5.3, -0.7);
+      crown3.castShadow = true;
+      tGroup.add(crown3);
+
+      treesGroup.add(tGroup);
+    }
+
+    function addCedarTree(x, z, scale = 1.0) {
+      const y = getGroundHeight(x, z);
+      const cGroup = new THREE.Group();
+      cGroup.position.set(x, y, z);
+      cGroup.scale.setScalar(scale);
+
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.45, 4.2, 7), matPineTrunk);
+      trunk.position.y = 2.1;
+      trunk.castShadow = true;
+      cGroup.add(trunk);
+
+      for (let tier = 0; tier < 4; tier++) {
+        const cone = new THREE.Mesh(
+          new THREE.ConeGeometry(2.8 - tier * 0.52, 3.2 - tier * 0.3, 8),
+          matCedarFoliage
+        );
+        cone.position.y = 3.8 + tier * 1.85;
+        cone.castShadow = true;
+        cone.receiveShadow = true;
+        cGroup.add(cone);
+      }
+      treesGroup.add(cGroup);
+    }
+
+    // 1. 山海關路 (z = 34): French Plane Trees / Sycamores (法國梧桐)
+    for (let x = -72; x <= 20; x += 8.5) {
+      if (Math.abs(x - 0) < 5 || Math.abs(x - 28) < 5 || Math.abs(x + 64) < 5) continue;
+      addDeciduousTree(x, 38.8, matSycamoreFoliage, 1.05 + (Math.abs(x) % 3) * 0.08);
+      addDeciduousTree(x, 29.2, matSycamoreFoliage, 1.0 + (Math.abs(x) % 2) * 0.1);
+    }
+
+    // 2. 居庸關路 (z = -6): Golden Ginkgo Trees (銀杏大道)
+    for (let x = -72; x <= 55; x += 8.5) {
+      if (Math.abs(x - 0) < 5 || Math.abs(x - 28) < 5 || Math.abs(x + 64) < 5) continue;
+      addDeciduousTree(x, -1.2, matGinkgoFoliage, 1.05);
+      addDeciduousTree(x, -10.8, matGinkgoFoliage, 1.08);
+    }
+
+    // 3. 嘉峪關路 (z = -44): Five-Pointed Crimson Maples (五角楓)
+    for (let x = -72; x <= 55; x += 9.0) {
+      if (Math.abs(x - 0) < 5 || Math.abs(x - 28) < 5 || Math.abs(x + 64) < 5) continue;
+      addDeciduousTree(x, -39.2, matMapleFoliage, 1.0);
+      addDeciduousTree(x, -48.8, matMapleFoliage, 1.04);
+    }
+
+    // 4. 韶關路 (x = 0): Flowering Peach Trees (碧桃)
+    for (let z = -60; z <= 28; z += 8.0) {
+      if (Math.abs(z - 34) < 5 || Math.abs(z + 6) < 5 || Math.abs(z + 44) < 5) continue;
+      addDeciduousTree(-4.6, z, matPeachFoliage, 0.88);
+      addDeciduousTree(4.6, z, matPeachFoliage, 0.88);
+    }
+
+    // 5. 紫荊關路 (x = 28): Evergreen Deodar Cedars (雪松)
+    for (let z = -60; z <= 32; z += 8.5) {
+      if (Math.abs(z - 34) < 5 || Math.abs(z + 6) < 5 || Math.abs(z + 44) < 5) continue;
+      addCedarTree(23.2, z, 1.05);
+      addCedarTree(32.8, z, 1.05);
+    }
+
+    // 6. 西南角「愛情角」綠柏與庭院點綴樹木
+    for (let i = 0; i < 28; i++) {
+      const rx = -75 + (i * 19) % 135;
+      const rz = -68 + (i * 23) % 95;
+      // Avoid roads & buildings
+      if (Math.abs(rz - 34) < 6 || Math.abs(rz + 6) < 6 || Math.abs(rz + 44) < 6) continue;
+      if (Math.abs(rx) < 6 || Math.abs(rx - 28) < 6) continue;
+      if (Math.hypot(rx - 40, rz - 45) < 18) continue;
+      if (Math.hypot(rx + 34, rz + 18) < 14) continue;
+      if (Math.hypot(rx + 48, rz - 20) < 14) continue;
+      if (i % 3 === 0) {
+        addCedarTree(rx, rz, 0.9 + (i % 3) * 0.12);
+      } else {
+        addDeciduousTree(rx, rz, i % 2 === 0 ? matGinkgoFoliage : matMapleFoliage, 0.95);
+      }
+    }
+
+    scene.add(treesGroup);
+
+    // ============================================================================
+    // 8. VINTAGE EUROPEAN STREETLAMPS & ROAD SIGNS ("復古歐式街燈與路牌")
+    // ============================================================================
+    const streetLampBulbs = [];
+    const lampMat = new THREE.MeshStandardMaterial({ color: 0x1e242b, metalness: 0.7, roughness: 0.35 });
+    const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffe49e });
+
+    function addStreetLamp(x, z) {
+      const y = getGroundHeight(x, z);
+      const g = new THREE.Group();
+      g.position.set(x, y, z);
+
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.16, 4.2, 8), lampMat);
+      post.position.y = 2.1;
+      post.castShadow = true;
+      g.add(post);
+
+      const globe = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 10), bulbMat);
+      globe.position.y = 4.35;
+      g.add(globe);
+      streetLampBulbs.push(globe);
+
+      scene.add(g);
+    }
+
+    const lampCoords = [
+      [33.5, 38], [22.5, 38], [5.5, 38], [-12, 38], [-30, 38], [-48, 38],
+      [33.5, -1], [22.5, -1], [5.5, -1], [-18, -1], [-36, -1],
+      [5.5, 16], [-5.5, 16], [33.5, 16], [22.5, 16]
+    ];
+    lampCoords.forEach(([lx, lz]) => addStreetLamp(lx, lz));
+
+    // ============================================================================
+    // 9. DRIFTING AUTUMN LEAVES / SPRING PETALS & COASTAL SEAGULLS ("動態粒子與海鷗")
+    // ============================================================================
+    const PARTICLE_COUNT = 320;
+    const particleGeo = new THREE.BufferGeometry();
+    const pPositions = new Float32Array(PARTICLE_COUNT * 3);
+    const pSpeeds = new Float32Array(PARTICLE_COUNT);
+
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      pPositions[i * 3] = (Math.random() - 0.5) * 150;
+      pPositions[i * 3 + 1] = 2 + Math.random() * 22;
+      pPositions[i * 3 + 2] = -65 + Math.random() * 115;
+      pSpeeds[i] = 0.6 + Math.random() * 1.2;
+    }
+    particleGeo.setAttribute("position", new THREE.BufferAttribute(pPositions, 3));
+
+    const particleMat = new THREE.PointsMaterial({
+      color: 0xf4b925,
+      size: 0.55,
+      transparent: true,
+      opacity: 0.88
+    });
+    const fallingLeaves = new THREE.Points(particleGeo, particleMat);
+    scene.add(fallingLeaves);
+
+    // Wheeling Seagulls over Taiping Bay & Huashi Villa
+    const seagulls = [];
+    const gullMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, side: THREE.DoubleSide });
+    for (let i = 0; i < 12; i++) {
+      const gullGroup = new THREE.Group();
+      const leftWing = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.05, 0.32), gullMat);
+      leftWing.position.x = -0.42;
+      const rightWing = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.05, 0.32), gullMat);
+      rightWing.position.x = 0.42;
+      gullGroup.add(leftWing, rightWing);
+
+      const cx = 10 + (Math.random() - 0.5) * 70;
+      const cz = 55 + (Math.random() - 0.5) * 45;
+      const cy = 16 + Math.random() * 14;
+      seagulls.push({
+        group: gullGroup,
+        leftWing,
+        rightWing,
+        centerX: cx,
+        centerZ: cz,
+        baseY: cy,
+        radius: 12 + Math.random() * 18,
+        speed: 0.35 + Math.random() * 0.35,
+        phase: Math.random() * Math.PI * 2
+      });
+      scene.add(gullGroup);
+    }
+
+    // ============================================================================
+    // 10. TIME-OF-DAY & SEASONAL ATMOSPHERE ENGINE
+    // ============================================================================
+    let currentTime = 17.2; // Default: Golden Sunset at Huashi Villa ("花石夕照")
+    let currentSeason = "autumn";
+
+    function updateAtmosphere(hour) {
+      currentTime = hour;
+      const slider = document.getElementById("time-slider");
+      if (Math.abs(parseFloat(slider.value) - hour) > 0.01) slider.value = hour;
+
+      const hInt = Math.floor(hour);
+      const mInt = Math.floor((hour - hInt) * 60);
+      document.getElementById("time-readout").textContent =
+        `${String(hInt).padStart(2, "0")}:${String(mInt).padStart(2, "0")}`;
+
+      // Compute sun altitude & azimuth (5:00 sunrise -> 13:00 zenith -> 18:30 sunset -> night)
+      const dayProgress = (hour - 5.5) / 13.0; // 0 at 05:30, 1 at 18:30
+      const sunAngle = Math.max(-0.35, Math.min(1.35, dayProgress)) * Math.PI;
+      const sunElev = Math.sin(sunAngle);
+      const sunAzim = -Math.cos(sunAngle);
+
+      const sunVec = new THREE.Vector3(sunAzim * 95, Math.max(6, sunElev * 95), 45).normalize();
+      skyUniforms.uSunDir.value.copy(sunVec);
+      sunLight.position.copy(sunVec).multiplyScalar(115);
+
+      if (hour < 7.8) {
+        // Morning Sea Mist (晨霧朝陽)
+        skyUniforms.uTopColor.value.setHex(0x4b79a1);
+        skyUniforms.uHorizonColor.value.setHex(0xf7c59f);
+        skyUniforms.uSunColor.value.setHex(0xffe3a8);
+        skyUniforms.uStarIntensity.value = 0.0;
+        sunLight.color.setHex(0xffd29d);
+        sunLight.intensity = 1.15;
+        hemiLight.color.setHex(0xdbe9f4);
+        hemiLight.intensity = 0.72;
+        scene.fog.color.setHex(0xead7c3);
+        scene.fog.density = 0.0052;
+        matWindowGlass.emissiveIntensity = 0.15;
+      } else if (hour < 15.8) {
+        // Qingdao Bright Blue Sky (朗日碧海 "紅瓦綠樹，碧海藍天")
+        skyUniforms.uTopColor.value.setHex(0x1e6091);
+        skyUniforms.uHorizonColor.value.setHex(0x90e0ef);
+        skyUniforms.uSunColor.value.setHex(0xffffff);
+        skyUniforms.uStarIntensity.value = 0.0;
+        sunLight.color.setHex(0xfff8eb);
+        sunLight.intensity = 1.55;
+        hemiLight.color.setHex(0xe0f4ff);
+        hemiLight.intensity = 0.78;
+        scene.fog.color.setHex(0xcbe8f6);
+        scene.fog.density = 0.0024;
+        matWindowGlass.emissiveIntensity = 0.05;
+      } else if (hour < 18.8) {
+        // Golden Sunset at Huashi Villa (花石夕照)
+        skyUniforms.uTopColor.value.setHex(0x283c66);
+        skyUniforms.uHorizonColor.value.setHex(0xf48c56);
+        skyUniforms.uSunColor.value.setHex(0xffbe55);
+        skyUniforms.uStarIntensity.value = 0.15;
+        sunLight.color.setHex(0xff9e44);
+        sunLight.intensity = 1.42;
+        hemiLight.color.setHex(0xffd6a5);
+        hemiLight.intensity = 0.62;
+        scene.fog.color.setHex(0xe5a97c);
+        scene.fog.density = 0.0036;
+        matWindowGlass.emissiveIntensity = 0.45;
+      } else {
+        // Starry Coastal Night (靜謐星夜)
+        skyUniforms.uTopColor.value.setHex(0x070d19);
+        skyUniforms.uHorizonColor.value.setHex(0x192a42);
+        skyUniforms.uSunColor.value.setHex(0x8ecae6);
+        skyUniforms.uStarIntensity.value = 1.0;
+        sunLight.color.setHex(0x7aa6c9);
+        sunLight.intensity = 0.42;
+        hemiLight.color.setHex(0x2b3d54);
+        hemiLight.intensity = 0.45;
+        scene.fog.color.setHex(0x111d2e);
+        scene.fog.density = 0.0042;
+        matWindowGlass.emissiveIntensity = 1.25;
+      }
+
+      oceanUniforms.uSunColor.value.copy(skyUniforms.uSunColor.value);
+    }
+
+    function updateSeason(season) {
+      currentSeason = season;
+      if (season === "autumn") {
+        // 深秋金韻: 居庸關銀杏金黃、嘉峪關五角楓火紅、山海關梧桐焦糖金
+        matSycamoreFoliage.color.setHex(0xd99b26);
+        matGinkgoFoliage.color.setHex(0xf4b925);
+        matMapleFoliage.color.setHex(0xc83e2b);
+        matPeachFoliage.color.setHex(0x8fa848);
+        particleMat.color.setHex(0xf4b925);
+        particleMat.opacity = 0.9;
+        leafCarpetGroup.visible = true;
+      } else if (season === "spring") {
+        // 仲春韶華: 韶關路碧桃粉紅如帶、萬木新綠
+        matSycamoreFoliage.color.setHex(0x589e42);
+        matGinkgoFoliage.color.setHex(0x6bb348);
+        matMapleFoliage.color.setHex(0x52943d);
+        matPeachFoliage.color.setHex(0xf48fb1); // Pink blossoming peach trees on Shaoguan Rd!
+        particleMat.color.setHex(0xf8bbd0);
+        particleMat.opacity = 0.85;
+        leafCarpetGroup.visible = false;
+      } else {
+        // 盛夏濃蔭: 紅瓦綠樹、碧海藍天
+        matSycamoreFoliage.color.setHex(0x2d6a3e);
+        matGinkgoFoliage.color.setHex(0x387844);
+        matMapleFoliage.color.setHex(0x285e36);
+        matPeachFoliage.color.setHex(0x34703e);
+        particleMat.color.setHex(0xa8e6cf);
+        particleMat.opacity = 0.25;
+        leafCarpetGroup.visible = false;
+      }
+    }
+
+    updateAtmosphere(17.2);
+    updateSeason("autumn");
+
+    // ============================================================================
+    // 11. PLAYER CAMERA & MOVEMENT CONTROLLER (WASD + Mouse Look + Ground Walk / Fly)
+    // ============================================================================
+    let yaw = 0.32;
+    let pitch = -0.14;
+    let isDragging = false;
+    let prevMouse = { x: 0, y: 0 };
+    let isPointerLocked = false;
+    let walkGroundLock = true;
+    let autoTourActive = false;
+    let autoTourAngle = 0;
+
+    // Smooth camera transition state for landmark teleports
+    let cameraTween = null;
+
+    function syncYawPitchFromLookAt(fromPos, targetPos) {
+      const dir = new THREE.Vector3().subVectors(targetPos, fromPos).normalize();
+      pitch = Math.asin(Math.max(-0.98, Math.min(0.98, dir.y)));
+      yaw = Math.atan2(-dir.x, -dir.z);
+    }
+
+    function applyCameraOrientation() {
+      const euler = new THREE.Euler(0, 0, 0, "YXZ");
+      euler.x = pitch;
+      euler.y = yaw;
+      camera.quaternion.setFromEuler(euler);
+    }
+
+    // Initialize camera looking at Huashi Villa
+    syncYawPitchFromLookAt(
+      new THREE.Vector3(LANDMARKS.huashi.pos.x, LANDMARKS.huashi.pos.y, LANDMARKS.huashi.pos.z),
+      new THREE.Vector3(LANDMARKS.huashi.lookAt.x, LANDMARKS.huashi.lookAt.y, LANDMARKS.huashi.lookAt.z)
+    );
+    applyCameraOrientation();
+
+    // Mouse Drag & PointerLock Look
+    container.addEventListener("mousedown", (e) => {
+      if (e.button === 0) {
+        isDragging = true;
+        prevMouse.x = e.clientX;
+        prevMouse.y = e.clientY;
+        cameraTween = null;
+        autoTourActive = false;
+        document.getElementById("btn-auto-tour").classList.remove("active");
+      }
+    });
+
+    window.addEventListener("mouseup", () => { isDragging = false; });
+
+    window.addEventListener("mousemove", (e) => {
+      if (isPointerLocked) {
+        yaw -= e.movementX * 0.0022;
+        pitch = Math.max(-Math.PI * 0.46, Math.min(Math.PI * 0.46, pitch - e.movementY * 0.0022));
+        applyCameraOrientation();
+      } else if (isDragging) {
+        const dx = e.clientX - prevMouse.x;
+        const dy = e.clientY - prevMouse.y;
+        prevMouse.x = e.clientX;
+        prevMouse.y = e.clientY;
+        yaw -= dx * 0.0032;
+        pitch = Math.max(-Math.PI * 0.46, Math.min(Math.PI * 0.46, pitch - dy * 0.0032));
+        applyCameraOrientation();
+      }
+    });
+
+    // Mouse Wheel Zoom / Forward Dolly
+    container.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      cameraTween = null;
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+      camera.position.addScaledVector(forward, -e.deltaY * 0.025);
+      camera.position.y = Math.max(1.8, Math.min(110, camera.position.y));
+    }, { passive: false });
+
+    // Keyboard WASD + Arrow Keys
+    const keys = {};
+    window.addEventListener("keydown", (e) => {
+      keys[e.code] = true;
+      if (["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) {
+        cameraTween = null;
+        autoTourActive = false;
+        document.getElementById("btn-auto-tour").classList.remove("active");
+      }
+    });
+    window.addEventListener("keyup", (e) => { keys[e.code] = false; });
+
+    // PointerLock Button
+    const btnPointerLock = document.getElementById("btn-pointer-lock");
+    const crosshair = document.getElementById("crosshair");
+    btnPointerLock.addEventListener("click", () => {
+      if (!isPointerLocked && container.requestPointerLock) {
+        container.requestPointerLock();
+      } else if (document.exitPointerLock) {
+        document.exitPointerLock();
+      }
+    });
+
+    document.addEventListener("pointerlockchange", () => {
+      isPointerLocked = document.pointerLockElement === container;
+      btnPointerLock.classList.toggle("active", isPointerLocked);
+      btnPointerLock.textContent = isPointerLocked ? "🎯 已鎖定視角 (ESC 退出)" : "🎯 鎖定滑鼠視角";
+      crosshair.classList.toggle("active", isPointerLocked);
+    });
+
+    // Ground Walk vs Free Fly Toggle
+    const btnWalkMode = document.getElementById("btn-walk-mode");
+    btnWalkMode.addEventListener("click", () => {
+      walkGroundLock = !walkGroundLock;
+      btnWalkMode.classList.toggle("active", walkGroundLock);
+      btnWalkMode.textContent = walkGroundLock ? "🚶 地面漫步模式：開" : "🕊️ 自由飛行模式：開";
+    });
+
+    // Auto Tour Toggle
+    const btnAutoTour = document.getElementById("btn-auto-tour");
+    btnAutoTour.addEventListener("click", () => {
+      autoTourActive = !autoTourActive;
+      btnAutoTour.classList.toggle("active", autoTourActive);
+      if (autoTourActive) {
+        walkGroundLock = false;
+        btnWalkMode.textContent = "🕊️ 自由飛行模式：開";
+        btnWalkMode.classList.remove("active");
+      }
+    });
+
+    // ============================================================================
+    // 12. 3D FLOATING WORLD LABELS & LANDMARK TELEPORTATION
+    // ============================================================================
+    const labelsContainer = document.getElementById("labels-container");
+    const labelElements = {};
+
+    Object.values(LANDMARKS).forEach((lm) => {
+      const el = document.createElement("div");
+      el.className = "world-label";
+      el.innerHTML = `<span class="label-dot" style="background:${lm.color}"></span><span>${lm.name.split("（")[0]}</span>`;
+      el.addEventListener("click", () => focusLandmark(lm.id));
+      labelsContainer.appendChild(el);
+      labelElements[lm.id] = el;
+    });
+
+    function showDetailCard(spotId) {
+      const lm = LANDMARKS[spotId];
+      if (!lm) return;
+      document.getElementById("detail-tag").textContent = lm.tag;
+      document.getElementById("detail-title").textContent = lm.name;
+      document.getElementById("detail-desc").textContent = lm.desc;
+      document.getElementById("detail-style").textContent = lm.style;
+      document.getElementById("detail-tree").textContent = lm.tree;
+
+      const linksWrap = document.getElementById("detail-links");
+      linksWrap.innerHTML = lm.links
+        .map((l) => `<a class="source-link" href="${l.url}" target="_blank" rel="noopener">${l.label}</a>`)
+        .join("");
+
+      document.getElementById("detail-card").classList.remove("hidden");
+    }
+
+    function focusLandmark(spotId) {
+      const lm = LANDMARKS[spotId];
+      if (!lm) return;
+
+      document.querySelectorAll(".spot-btn").forEach((b) => {
+        b.classList.toggle("active", b.dataset.spot === spotId);
+      });
+
+      showDetailCard(spotId);
+      autoTourActive = false;
+      btnAutoTour.classList.remove("active");
+
+      if (spotId === "overview") {
+        walkGroundLock = false;
+        btnWalkMode.textContent = "🕊️ 自由飛行模式：開";
+        btnWalkMode.classList.remove("active");
+      }
+
+      const startPos = camera.position.clone();
+      const endPos = new THREE.Vector3(lm.pos.x, lm.pos.y, lm.pos.z);
+      const lookPos = new THREE.Vector3(lm.lookAt.x, lm.lookAt.y, lm.lookAt.z);
+
+      const startYaw = yaw;
+      const startPitch = pitch;
+      syncYawPitchFromLookAt(endPos, lookPos);
+      const targetYaw = yaw;
+      const targetPitch = pitch;
+      yaw = startYaw;
+      pitch = startPitch;
+
+      cameraTween = {
+        startTime: performance.now(),
+        duration: 1350,
+        startPos,
+        endPos,
+        startYaw,
+        startPitch,
+        targetYaw,
+        targetPitch
+      };
+    }
+
+    document.querySelectorAll(".spot-btn").forEach((btn) => {
+      btn.addEventListener("click", () => focusLandmark(btn.dataset.spot));
+    });
+
+    document.getElementById("close-detail").addEventListener("click", () => {
+      document.getElementById("detail-card").classList.add("hidden");
+    });
+
+    // Time & Season UI Listeners
+    document.querySelectorAll(".pill-btn[data-time]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".pill-btn[data-time]").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        updateAtmosphere(parseFloat(btn.dataset.time));
+      });
+    });
+
+    document.getElementById("time-slider").addEventListener("input", (e) => {
+      document.querySelectorAll(".pill-btn[data-time]").forEach((b) => b.classList.remove("active"));
+      updateAtmosphere(parseFloat(e.target.value));
+    });
+
+    document.querySelectorAll(".pill-btn.season").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".pill-btn.season").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        updateSeason(btn.dataset.season);
+      });
+    });
+
+    // ============================================================================
+    // 13. WEB AUDIO API PROCEDURAL COASTAL SOUNDSCAPE ("太平灣海浪與梧桐海風音效")
+    // ============================================================================
+    let audioCtx = null;
+    let isAudioPlaying = false;
+    let masterGain = null;
+
+    function toggleCoastalAudio() {
+      const btn = document.getElementById("btn-audio");
+      if (!audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContextClass();
+
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = 0.22;
+        masterGain.connect(audioCtx.destination);
+
+        // Pink-ish noise buffer for ocean surf & wind through sycamore leaves
+        const bufferSize = audioCtx.sampleRate * 4;
+        const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+        let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+        for (let i = 0; i < bufferSize; i++) {
+          const white = Math.random() * 2 - 1;
+          b0 = 0.99886 * b0 + white * 0.0555179;
+          b1 = 0.99332 * b1 + white * 0.0750759;
+          b2 = 0.96900 * b2 + white * 0.1538520;
+          b3 = 0.86650 * b3 + white * 0.3104856;
+          b4 = 0.55000 * b4 + white * 0.5329522;
+          b5 = -0.7616 * b5 - white * 0.0168980;
+          output[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.04;
+          b6 = white * 0.115926;
+        }
+
+        const whiteNoise = audioCtx.createBufferSource();
+        whiteNoise.buffer = noiseBuffer;
+        whiteNoise.loop = true;
+
+        const surfFilter = audioCtx.createBiquadFilter();
+        surfFilter.type = "lowpass";
+        surfFilter.frequency.value = 420;
+
+        // LFO to modulate ocean wave ebb and flow (every ~7 seconds)
+        const lfo = audioCtx.createOscillator();
+        lfo.frequency.value = 0.14;
+        const lfoGain = audioCtx.createGain();
+        lfoGain.gain.value = 260;
+        lfo.connect(surfFilter.frequency);
+
+        whiteNoise.connect(surfFilter);
+        surfFilter.connect(masterGain);
+
+        whiteNoise.start(0);
+        lfo.start(0);
+        isAudioPlaying = true;
+      } else {
+        if (audioCtx.state === "suspended") {
+          audioCtx.resume();
+          isAudioPlaying = true;
+        } else if (isAudioPlaying) {
+          audioCtx.suspend();
+          isAudioPlaying = false;
+        }
+      }
+
+      btn.classList.toggle("active", isAudioPlaying);
+      btn.textContent = isAudioPlaying ? "🔊 海浪與海風音效：開" : "🔊 海浪與海風音效：關";
+    }
+
+    document.getElementById("btn-audio").addEventListener("click", toggleCoastalAudio);
+
+    // ============================================================================
+    // 14. MAIN ANIMATION LOOP
+    // ============================================================================
+    const clock = new THREE.Clock();
+    const tempVec = new THREE.Vector3();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.1);
+      const elapsed = clock.getElapsedTime();
+
+      // 1. Update Ocean Waves
+      oceanUniforms.uTime.value = elapsed;
+
+      // 2. Update Falling Autumn Leaves / Spring Peach Petals
+      const posArr = fallingLeaves.geometry.attributes.position.array;
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        posArr[i * 3] += Math.sin(elapsed * 0.8 + i) * 0.025;
+        posArr[i * 3 + 1] -= pSpeeds[i] * dt * 1.8;
+        posArr[i * 3 + 2] += Math.cos(elapsed * 0.6 + i * 0.5) * 0.02;
+        if (posArr[i * 3 + 1] < 1.2) {
+          posArr[i * 3 + 1] = 18 + Math.random() * 8;
+        }
+      }
+      fallingLeaves.geometry.attributes.position.needsUpdate = true;
+
+      // 3. Update Wheeling Seagulls
+      seagulls.forEach((g) => {
+        const a = elapsed * g.speed + g.phase;
+        const nx = g.centerX + Math.cos(a) * g.radius;
+        const nz = g.centerZ + Math.sin(a) * g.radius;
+        const ny = g.baseY + Math.sin(elapsed * 1.5 + g.phase) * 1.2;
+        g.group.position.set(nx, ny, nz);
+        g.group.rotation.y = -a;
+        const flap = Math.sin(elapsed * 6.5 + g.phase) * 0.35;
+        g.leftWing.rotation.z = flap;
+        g.rightWing.rotation.z = -flap;
+      });
+
+      // 4. Camera Tween / Auto Tour / Player Keyboard Movement
+      if (cameraTween) {
+        const now = performance.now();
+        const t = Math.min(1, (now - cameraTween.startTime) / cameraTween.duration);
+        const ease = 1 - Math.pow(1 - t, 3);
+        camera.position.lerpVectors(cameraTween.startPos, cameraTween.endPos, ease);
+        yaw = cameraTween.startYaw + (cameraTween.targetYaw - cameraTween.startYaw) * ease;
+        pitch = cameraTween.startPitch + (cameraTween.targetPitch - cameraTween.startPitch) * ease;
+        applyCameraOrientation();
+        if (t >= 1) cameraTween = null;
+      } else if (autoTourActive) {
+        autoTourAngle += dt * 0.16;
+        const tx = 5 + Math.sin(autoTourAngle) * 65;
+        const tz = 18 + Math.cos(autoTourAngle) * 58;
+        const ty = 22 + Math.sin(autoTourAngle * 2) * 6;
+        camera.position.set(tx, ty, tz);
+        syncYawPitchFromLookAt(camera.position, new THREE.Vector3(5, 6, 12));
+        applyCameraOrientation();
+      } else {
+        // Keyboard WASD / Arrow movement
+        const baseSpeed = (keys["ShiftLeft"] || keys["ShiftRight"]) ? 26.0 : 12.5;
+        const forward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)).normalize();
+        const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw)).normalize();
+
+        if (keys["KeyW"] || keys["ArrowUp"]) camera.position.addScaledVector(forward, baseSpeed * dt);
+        if (keys["KeyS"] || keys["ArrowDown"]) camera.position.addScaledVector(forward, -baseSpeed * dt);
+        if (keys["KeyD"] || keys["ArrowRight"]) camera.position.addScaledVector(right, baseSpeed * dt);
+        if (keys["KeyA"] || keys["ArrowLeft"]) camera.position.addScaledVector(right, -baseSpeed * dt);
+
+        if (keys["Space"] || keys["KeyE"]) {
+          walkGroundLock = false;
+          btnWalkMode.textContent = "🕊️ 自由飛行模式：開";
+          btnWalkMode.classList.remove("active");
+          camera.position.y += baseSpeed * 0.75 * dt;
+        }
+        if (keys["KeyQ"] || keys["ControlLeft"]) {
+          walkGroundLock = false;
+          btnWalkMode.textContent = "🕊️ 自由飛行模式：開";
+          btnWalkMode.classList.remove("active");
+          camera.position.y -= baseSpeed * 0.75 * dt;
+        }
+
+        const groundY = getGroundHeight(camera.position.x, camera.position.z);
+        if (walkGroundLock && camera.position.z < 52) {
+          const targetWalkY = Math.max(2.2, groundY + 2.35);
+          camera.position.y += (targetWalkY - camera.position.y) * 0.15;
+        } else {
+          camera.position.y = Math.max(Math.max(1.8, groundY + 1.5), Math.min(125, camera.position.y));
+        }
+
+        // Keep player within scenic boundary
+        camera.position.x = Math.max(-105, Math.min(105, camera.position.x));
+        camera.position.z = Math.max(-95, Math.min(135, camera.position.z));
+      }
+
+      // 5. Update Telemetry Readout
+      const relHeight = Math.max(1.5, camera.position.y - Math.max(0, getGroundHeight(camera.position.x, camera.position.z)));
+      document.getElementById("telemetry").textContent =
+        `${walkGroundLock ? "漫步高度" : "飛行高度"} ${relHeight.toFixed(1)}m`;
+
+      // 6. Project 3D Floating World Labels onto 2D Screen
+      Object.values(LANDMARKS).forEach((lm) => {
+        const el = labelElements[lm.id];
+        tempVec.set(lm.labelPos.x, lm.labelPos.y, lm.labelPos.z);
+        tempVec.project(camera);
+
+        if (tempVec.z > 1.0) {
+          el.style.display = "none";
+        } else {
+          const sx = (tempVec.x * 0.5 + 0.5) * window.innerWidth;
+          const sy = (-(tempVec.y * 0.5) + 0.5) * window.innerHeight;
+          el.style.display = "flex";
+          el.style.left = `${sx}px`;
+          el.style.top = `${sy}px`;
+        }
+      });
+
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    animate();
+  </script>
+</body>
+</html>
